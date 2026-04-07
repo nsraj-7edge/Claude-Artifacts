@@ -1,9 +1,9 @@
 # /standup — Kanban Daily Standup Briefing
 
-**Author:** Sagar Gupta · Senior Agile Business Analyst · 7EDGE  
-**Command:** `/PM/standup [board-name]`  
+**Command:** `/PM/standup [board-name] [keyword?]`  
 **Category:** Project Management  
-**Integrations:** Atlassian Jira (via MCP)
+**Integrations:** Atlassian Jira (via MCP)  
+**Audience:** All 7EDGE team members
 
 ---
 
@@ -19,14 +19,23 @@ It pulls live data from Jira via the Atlassian MCP and produces a structured rep
 
 ```
 /PM/standup [board-name]
+/PM/standup [board-name] [keyword]
 ```
 
-**Examples:**
-- `/PM/standup CC` — Briefing for the Continuous Crusaders board
-- `/PM/standup PHOENIX` — Briefing for the Phoenix project board
-- `/PM/standup MQR` — Briefing for the Maison QR board
+**Arguments:**
 
-The board name should match the Jira project key as it appears in your Atlassian workspace.
+| Argument | Required | Description |
+|---|---|---|
+| `board-name` | Yes | Jira project key or board name (e.g. `CC`, `MQR`, `PHOENIX`) |
+| `keyword` | No | Characters or text that appear in card summaries — limits the report to only matching cards |
+
+**Examples:**
+- `/PM/standup CC` — Full briefing for all active cards on the CC board
+- `/PM/standup CC Arrow` — Briefing for only CC cards whose summary contains "Arrow"
+- `/PM/standup MQR Bulk` — Briefing for only MQR cards whose summary contains "Bulk"
+- `/PM/standup PHOENIX` — Full briefing for all active cards on the PHOENIX board
+
+When a keyword is provided, the output format and structure are identical — only the card set is narrowed to those whose summary contains the keyword (case-insensitive). This is useful for focusing the meeting on a specific feature area, project prefix, or workstream, and reduces the number of Jira results fetched.
 
 ---
 
@@ -36,15 +45,25 @@ The board name should match the Jira project key as it appears in your Atlassian
 
 Use the Atlassian MCP to authenticate and resolve the board name to its project key and cloud ID. If the board name cannot be resolved, ask the user to confirm the exact project key from their Jira instance.
 
-### Step 2 — Fetch Active Cards
+### Step 2 — Detect Input Mode and Fetch Cards
 
-Query all issues from the board where status falls in the active range:
+Read the arguments provided after `/PM/standup`:
+
+- **Board name only** → fetch all active cards on that board (no summary filter)
+- **Board name + keyword** → fetch only active cards on that board whose summary contains the keyword (case-insensitive match)
+
+In both cases, apply the same status filter:
 
 **Include:** `Ready`, `In Queue`, `Queue`, `In Progress`, `In Design`, `Design`, `Review`, `In Review`, `Code Review`, `QA`, `In QA`, `Testing`, `UAT`, `Done`
 
 **Exclude:** `Backlog`, `Deployed`, `Cancelled`, `Rejected`, `Won't Fix`, `Closed`
 
-For each issue retrieve:
+When a keyword is provided, add a summary filter to the JQL query:
+```
+project = [KEY] AND status IN (...) AND summary ~ "[keyword]"
+```
+
+For each matched issue retrieve:
 - Key, summary, status, priority
 - Assignee (display name)
 - Reporter (display name)
@@ -103,6 +122,7 @@ Display a summary table of card counts by status:
 Also display:
 - Total cards aging > 3 days
 - Total cards with detected blockers or external dependencies
+- If a keyword was used, note: `Filtered by keyword: "[keyword]"`
 
 ---
 
@@ -160,7 +180,7 @@ Any cards created on the day the command is run, with their assignee and current
 
 ### Full Card Listing (grouped by status)
 
-All active cards, grouped in this order:  
+All active cards (or all matching cards if a keyword was used), grouped in this order:  
 In Progress → In Design → QA → Review → Queue → Ready → Done
 
 For each card:
@@ -182,18 +202,21 @@ Latest update: [Author, Date] — one-line comment summary
 - Unassigned cards must be explicitly flagged and called out
 - Cards in Done status are included in the count but not individually listed unless they are relevant to an active blocker discussion
 - If the board name cannot be resolved, clearly say so and ask for the exact Jira project key
-- If no active cards are found, output: "✅ Board is clear — no active cards in the standup range."
+- If a keyword is provided but no cards match, output: "No active cards found matching '[keyword]' on [board]."
+- If no active cards are found at all, output: "✅ Board is clear — no active cards in the standup range."
 - Never include cards in Backlog, Deployed, Cancelled, Rejected, Closed, or Won't Fix — these statuses are out of scope for kanban standups
+- The output format and all report sections are identical whether or not a keyword is used — only the card set changes
 
 ---
 
 ## Design Notes
 
-This command was built for the daily kanban standup ritual at 7EDGE, where the PM/BA reviews all active cards with the team before or during the meeting. Key design decisions:
+This command was built for the daily kanban standup ritual at 7EDGE, where any PM, BA, or team lead reviews all active cards with the team before or during the meeting. Key design decisions:
 
 1. **Pre-meeting use** — run this *before* the call to know exactly what to ask and whom to ask it, so the meeting is focused rather than exploratory
-2. **Comment intelligence** — most stall signals are buried in card comments, not status fields; this command reads and surfaces them so nothing is missed
-3. **Aging from created date** — a card's age since creation is a more reliable stagnation indicator than its last-updated timestamp, which can be triggered by minor field changes
-4. **Board-scoped, not person-scoped** — unlike `/PM/jira-update` (which is person-centric), this command gives a complete team view of what is live on the board
+2. **Keyword filter** — when a board has many cards, the optional keyword narrows results to a specific workstream (e.g. "Arrow", "STG", "MQR") without changing the output structure; this reduces token usage and keeps the briefing focused
+3. **Comment intelligence** — most stall signals are buried in card comments, not status fields; this command reads and surfaces them so nothing is missed
+4. **Aging from created date** — a card's age since creation is a more reliable stagnation indicator than its last-updated timestamp, which can be triggered by minor field changes
+5. **Board-scoped, not person-scoped** — unlike `/PM/jira-update` (which is person-centric), this command gives a complete team view of what is live on the board
 
 **Companion command:** `/PM/jira-update` — person-centric Jira check (assigned cards + unacknowledged mentions for an individual)
